@@ -57,7 +57,36 @@ rodale_trt %>%
   arrange(desc(plot)) %>% 
   print(n = Inf)
 
+# I must add the final trts now
+  # 11 = organic manure
+  # 22 = organic legume
+  # 31 = conventional without cc 
+  # 33 = conventional with cc 
+# can I use str_detect for the end of a string? 
 
+test <- rodale_trt
+test[,'new_trt'] = NA
+test %>% 
+  mutate(new_trt = case_when(grepl(133, trt)) ~ "CCC")
+# I thought this would have worked 
+test %>% 
+  mutate(new_trt = 'CCC'[grep(33, plot)], 
+         new_trt = 'OM'[grep(11, plot)],
+         new_trt = 'OL'[grep(22, plot)],
+         new_trt = 'CWW'[grep(31, plot)])
+# this does not work 
+if(grep(33, rodale_trt$plot)){
+  mutate(new_trt = 'CCC')
+}
+
+
+
+
+
+###
+##
+#
+# inspecting
 # sort by date and look at orb summary
 rodale_trt %>%
   group_by(date, trt) %>% 
@@ -89,3 +118,28 @@ rodale_totals %>%
 
 
 # Permanova ####
+
+arth_groups <- rodale_totals[,3:32]
+
+dist <- vegdist(arth_groups, "bray")
+
+permanova_trt <- adonis2(dist ~ trt, permutations = 999, method = "bray", data = rodale_totals)
+permanova_trt
+
+permanova_date <- adonis2(dist ~ date, permutations = 999, method = "bray", data = rodale_totals)
+permanova_date
+
+permanova_d.t <- adonis2(dist ~ trt*date, permutations = 999, method = "bray", data = rodale_totals)
+permanova_d.t
+
+# NMDS ####
+
+# running two fits: k = 2 and 3
+ord_2 <- metaMDS(arth_groups, k = 2)
+ord_2$stress # 0.23
+stressplot(ord_2)
+ord_3 <- metaMDS(arth_groups, k = 3)
+ord_3$stress # 0.17
+stressplot(ord_3)
+
+
