@@ -48,12 +48,12 @@ rodale <- as_tibble(Rodale_counts)
 
 # This is the route I am going with 
 rodale_trt <- rodale %>%
-  mutate(trt = c('NT', 'T')[1+str_detect(plot, "^[1 | 3 | 4 | 6]")])
+  mutate(tillage = c('NT', 'T')[1+str_detect(plot, "^[1 | 3 | 4 | 6]")])
 
 # did this work? : yes
 rodale_trt %>% 
-  select(plot, trt) %>% 
-  filter(trt == "NT") %>% 
+  select(plot, tillage) %>% 
+  filter(tillage == "NT") %>% 
   arrange(desc(plot)) %>% 
   print(n = Inf)
 
@@ -62,34 +62,24 @@ rodale_trt %>%
   # 22 = organic legume
   # 31 = conventional without cc 
   # 33 = conventional with cc 
-# can I use str_detect for the end of a string? 
 
-test <- rodale_trt
-test[,'new_trt'] = NA
-test %>% 
-  mutate(new_trt = case_when(grepl(133, trt)) ~ "CCC")
-# I thought this would have worked 
-test %>% 
-  mutate(new_trt = 'CCC'[grep(33, plot)], 
-         new_trt = 'OM'[grep(11, plot)],
-         new_trt = 'OL'[grep(22, plot)],
-         new_trt = 'CWW'[grep(31, plot)])
-# this does not work 
-if(grep(33, rodale_trt$plot)){
-  mutate(new_trt = 'CCC')
-}
-
-
-
-
+unique(rodale$plot)
+rodale_clean <- rodale_trt %>% 
+  mutate(trt = case_when(plot %in% c(111,211,311,411,511,611,711,811) ~ 'OM',
+                              plot %in% c(122,222,322,422,522,622,722,822) ~ 'OL',
+                              plot %in% c(131,231,331,431,531,631,731,831) ~ 'CWW',
+                              plot %in% c(133,233,333,433,533,633,733,833) ~ 'CCC'))
+rodale_clean %>% 
+  select(tillage, plot, trt) %>% 
+  print(n = Inf)
 
 ###
 ##
 #
 # inspecting
 # sort by date and look at orb summary
-rodale_trt %>%
-  group_by(date, trt) %>% 
+rodale_clean %>%
+  group_by(date, tillage, trt) %>% 
   summarize(
     mean_orb = mean(Orb),
     sd_orb = sd(Orb),
@@ -98,13 +88,13 @@ rodale_trt %>%
 
 
 # create column for all arthropoda
-rodale_totals <- rodale_trt %>% 
+rodale_totals <- rodale_clean %>% 
   mutate(total_arth = select(.,3:32) %>% # add across all rows from columns 3 through 32
            rowSums(na.rm = TRUE))
 rodale_totals$total_arth
 
 rodale_totals %>% 
-  group_by(date, plot, trt) %>% 
+  group_by(date, plot, tillage) %>% 
   summarise(
     mean = mean(total_arth),
     sd = sd(total_arth),
@@ -123,14 +113,21 @@ arth_groups <- rodale_totals[,3:32]
 
 dist <- vegdist(arth_groups, "bray")
 
+
+# want to see by date, trt, tillage
 permanova_trt <- adonis2(dist ~ trt, permutations = 999, method = "bray", data = rodale_totals)
 permanova_trt
 
 permanova_date <- adonis2(dist ~ date, permutations = 999, method = "bray", data = rodale_totals)
 permanova_date
 
-permanova_d.t <- adonis2(dist ~ trt*date, permutations = 999, method = "bray", data = rodale_totals)
-permanova_d.t
+permanova_tillage <- adonis2(dist ~ tillage, permutations = 999, method = "bray", data = rodale_totals)
+permanova_tillage
+
+permanova_all <- adonis2(dist ~ date*trt*tillage, permutations = 999, method = "bray", data = rodale_totals)
+permanova_all
+
+
 
 # NMDS ####
 
@@ -143,3 +140,88 @@ ord_3$stress # 0.17
 stressplot(ord_3)
 
 
+
+# Taxon Scores ####
+
+# I need to assign values to each taxon group 
+# First, aggregate appropriate columns
+  # e.g., diplurans 
+# Second, assign appropriate score in a new column 
+# Third, compare these scores
+  # How?
+
+# 1: aggregate 
+
+colnames(rodale_totals)
+
+rodale_aggregate <- rodale_totals %>% 
+  mutate(mites = Orb + Norb,
+         diplura = Japy + Camp,
+         collembola = Sym + Ento,
+         larvae = CL + OL + neuroptera,
+         hemiptera = hemip + Enich,
+         adult = Adipt + lep + Siphon,
+         symph_tot = Simphyla + Scolopendrellida) %>% 
+  select(-Orb, -Norb, -Japy, -Camp, -Sym, -Ento, -CL, -OL, -hemip, -Enich,
+         -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida)
+  
+
+# 2: adding the scores
+  # this may be a bear
+  # individual if_else statements for each column?
+    # if(x >= 1) {score = #} else {score = 0}?
+    # OR if_else(x >= #, 20) # THIS ONE
+# the only concern is with colembolans
+# Podo get 20
+# ento and sym get 10, in general 
+# will combine ento and sym, but keep podo separate
+# NEED to revisit coleoptera, for now giving them all 10 and carabids 1
+# dip = 5
+# chil = 10
+# hymen = 1
+# form = 5
+# ALL larvae = 10
+# TEST
+test_score <- rodale_aggregate %>% 
+  select(mites, plot)
+
+?if_else
+test_score %>% 
+  mutate(score = if_else(mites >= 1, 20, 0))
+#
+
+# REAL
+# the order of this is based on the table provided in Parisi et al
+colnames(rodale_aggregate)
+rodale_scores <- rodale_aggregate %>% 
+  mutate(mite_score = if_else(mites >= 1, 20, 0),
+         pro_score = if_else(Protura >= 1, 20,0),
+         dip_score = if_else(diplura >= 1, 20, 0),
+         hemip_score = if_else(hemiptera >= 1, 1, 0), #1 unless cicada larvae 
+         thrips_score = if_else(Thrips >= 1, 1, 0),
+         coleop_score = if_else(OAC >= 1, 10, 0),
+         carabid_score = if_else(AC >= 1, 1, 0),
+         hymen_score = if_else(hymen >= 1, 1, 0),
+         formic_score = if_else(Formicid >= 1, 5, 0), 
+         larvae_score = if_else(larvae >= 1, 10, 0),
+         spider_score = if_else(Spider >= 1, 5, 0),
+         pseudo_score = if_else(Pseu >= 1, 20, 0), 
+         isop_score = if_else(Iso >= 1, 10, 0), 
+         chil_score = if_else(Chil >= 1, 10, 0), 
+         diplo_score = if_else(Dip >= 1, 5, 0), 
+         symph_score = if_else(symph_tot >= 1, 20, 0), 
+         eu_ed_col_score = if_else(collembola >= 1, 10, 0), 
+         podo_score = if_else(Pod >= 1, 20, 0),
+         adult_score = if_else(adult >= 1, 1, 0),
+         pauropod_score = if_else(Pauropoda >= 1, 20, 0)) %>% 
+   select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -OAC, -AC, -hymen,
+          -Formicid, -larvae, -Spider, -Pseu, -Iso, -Chil, -Dip, -symph_tot,
+          -collembola, -Pod, -neuroptera, -adult, -Pauropoda, -Annelid)
+
+colnames(rodale_scores)
+
+# adding these columns into one total score column
+rodale_scores %>% 
+  mutate(total_score = select(.,6:25) %>% 
+         rowSums(na.rm = TRUE)) %>% 
+  select(plot, trt, tillage, total_score)
