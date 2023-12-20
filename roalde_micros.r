@@ -221,7 +221,36 @@ rodale_scores <- rodale_aggregate %>%
 colnames(rodale_scores)
 
 # adding these columns into one total score column
-rodale_scores %>% 
+rodale_final <- rodale_scores %>% 
   mutate(total_score = select(.,6:25) %>% 
          rowSums(na.rm = TRUE)) %>% 
-  select(plot, trt, tillage, total_score)
+  select(date, plot, trt, tillage, total_score) %>% 
+  mutate(treatment = paste(trt, '-', tillage),
+         treatment = as.factor(treatment))
+
+ggplot(mean_scores, aes(x = treatment, y = total_score, fill = date))+
+  geom_boxplot()
+
+mean_scores <- rodale_final %>%
+  select(-tillage, -trt, -plot) %>% 
+  arrange(date, treatment)  %>% 
+  group_by(treatment, date) %>% 
+  summarize(avg = mean(total_score)) %>% 
+  print(n = Inf)
+
+# ANOVA 
+# date is significant 
+test_model <- aov(avg ~ treatment + date, data = mean_scores)
+summary(test_model)
+hist(residuals(test_model)) # look good
+?TukeyHSD
+TukeyHSD(test_model)
+
+#nothing sig here becuase date is excluded 
+test_model_2 <- aov(avg ~ treatment, data = mean_scores)
+summary(test_model_2)
+
+glm_test <- glm(avg ~ treatment + date, data = mean_scores)
+summary(glm_test)
+hist(residuals(glm_test))
+
