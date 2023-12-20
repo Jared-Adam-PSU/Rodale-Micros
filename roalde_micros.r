@@ -254,3 +254,28 @@ glm_test <- glm(avg ~ treatment + date, data = mean_scores)
 summary(glm_test)
 hist(residuals(glm_test))
 
+
+# Shannon index ####
+
+# following along with a tutorial 
+# https://www.flutterbys.com.au/stats/tut/tut13.2.html
+
+colnames(rodale_totals)
+rodale_shannon <- rodale_totals %>% 
+  mutate(treatment = paste(trt, '-', tillage),
+         treatment = as.factor(treatment)) %>% 
+  select(-trt, -tillage)
+colnames(rodale_shannon)
+library(plyr)
+# sum up the number of non-zero entries per row
+# ignore the first two columns cuz they aint numbas 
+
+?ddply
+ddply(rodale_totals, ~trts, function(x){
+  data.frame(richness = sum(x[3:33]>0))
+})
+ddply(rodale_totals,~Sites,function(x) {
+  data.frame(RICHNESS=sum(x[3:33]>0))
+})
+
+apply(rodale_totals[,3:33]>0,1,sum)
