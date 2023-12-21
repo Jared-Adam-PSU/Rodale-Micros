@@ -107,78 +107,6 @@ rodale_totals %>%
 #   mutate_across(as.factor(c('plot', 'date')))
 
 
-# Permanova ####
-
-arth_groups <- rodale_totals[,3:32]
-
-dist <- vegdist(arth_groups, "bray")
-
-
-# want to see by date, trt, tillage
-permanova_trt <- adonis2(dist ~ trt, permutations = 999, method = "bray", data = rodale_totals)
-permanova_trt
-
-permanova_date <- adonis2(dist ~ date, permutations = 999, method = "bray", data = rodale_totals)
-permanova_date
-
-permanova_tillage <- adonis2(dist ~ tillage, permutations = 999, method = "bray", data = rodale_totals)
-permanova_tillage
-
-permanova_all <- adonis2(dist ~ date*trt*tillage, permutations = 999, method = "bray", data = rodale_totals)
-permanova_all
-
-
-
-# NMDS ####
-rodale_nmds<- rodale_clean %>% 
-mutate(treatment = paste(trt, '-', tillage),
-       treatment = as.factor(treatment))
-# running two fits: k = 2 and 3
-ord_2 <- metaMDS(arth_groups, k = 2)
-ord_2$stress # 0.23
-stressplot(ord_2)
-
-# going to use this one
-ord_3 <- metaMDS(arth_groups, k = 3)
-ord_3$stress # 0.17
-stressplot(ord_3)
-
-
-# need to get site scores for ordination
-# I think I want display  = "sites"
-?scores
-scrs <- scores(ord_3, display = "sites")
-# adding my scores from metaMDS to their associated trts 
-scrs <- cbind(as.data.frame(scrs), trt = rodale_nmds$treatment)
-scrs <- cbind(as.data.frame(scrs), date = rodale_nmds$date)
-
-# i want to add functional group to this df 
-# "species" = averaged site scores
-# as_tibble here gets rid of the name and replaces the groups with numbers != what I want
-functional_scores <- as.data.frame(scores(ord_3, "species"))
-functional_scores$species <- rownames(functional_scores)
-
-unique(rodale_nmds$treatment)
-# going to chull the objects to get trts into their own shapes
-CWW_NT <- scrs[scrs$trt == "CWW - NT",][chull(scrs[scrs$trt == "CWW - NT",c("NMDS1", "NMDS2", "NMDS3")]),]
-CWW_T <- scrs[scrs$trt == "CWW - T",][chull(scrs[scrs$trt == "CWW - T",c("NMDS1", "NMDS2","NMDS3")]),]
-OL_T <- scrs[scrs$trt == "OL - T",][chull(scrs[scrs$trt == "OL - T",c("NMDS1", "NMDS2","NMDS3")]),]
-OL_NT <- scrs[scrs$trt == "OL - NT",][chull(scrs[scrs$trt == "OL - NT",c("NMDS1", "NMDS2","NMDS3")]),]
-OM_T <- scrs[scrs$trt == "OM - T",][chull(scrs[scrs$trt == "OM - T",c("NMDS1", "NMDS2","NMDS3")]),]
-OM_NT <- scrs[scrs$trt == "OM - NT",][chull(scrs[scrs$trt == "OM - NT",c("NMDS1", "NMDS2","NMDS3")]),]
-CCC_NT <- scrs[scrs$trt == "CCC - NT",][chull(scrs[scrs$trt == "CCC - NT",c("NMDS1", "NMDS2","NMDS3")]),]
-CCC_T <- scrs[scrs$trt == "CCC - T",][chull(scrs[scrs$trt == "CCC - T",c("NMDS1", "NMDS2","NMDS3")]),]
-
-
-hull.data <- rbind(CWW_NT, CWW_T, CCC_NT,CCC_T,OL_NT,OL_T,OM_NT, OM_T)
-as_tibble(hull.data) %>% #trt = factor
-  select(-site)
-hull.data$trt <- as.factor(hull.data$trt)
-library(ggrepel)
-
-
-
-
 # Taxon Scores ####
 
 # I need to assign values to each taxon group 
@@ -319,6 +247,267 @@ glm_tillage <- glm(avg ~ tillage + date, data = rodale_tillage)
 summary(glm_tillage)
 hist(residuals(glm_tillage))
 qqnorm(residuals(glm_tillage))
+
+# Permanova ####
+arth_groups <- rodale_totals[,3:32]
+
+dist <- vegdist(arth_groups, "bray")
+
+
+# want to see by date, trt, tillage
+permanova_trt <- adonis2(dist ~ trt, permutations = 999, method = "bray", data = rodale_totals)
+permanova_trt
+
+permanova_date <- adonis2(dist ~ date, permutations = 999, method = "bray", data = rodale_totals)
+permanova_date
+
+permanova_tillage <- adonis2(dist ~ tillage, permutations = 999, method = "bray", data = rodale_totals)
+permanova_tillage
+
+permanova_all <- adonis2(dist ~ date*trt*tillage, permutations = 999, method = "bray", data = rodale_totals)
+permanova_all
+
+
+
+# NMDS ####
+# going to use taxon score df 
+
+# rodale_nmds<- rodale_clean %>% 
+# mutate(treatment = paste(trt, '-', tillage),
+#        treatment = as.factor(treatment))
+# running two fits: k = 2 and 3
+colnames(rodale_nmds)
+
+colnames(rodale_aggregate)
+rodale_ord_df <- rodale_aggregate %>% 
+  select(-total_arth, -neuroptera) %>% 
+  dplyr::rename('Eu-edaphic collembola' = Pod,
+                'Hemi-edpahic collembola' = collembola,
+                'Diplopoda' = Dip, 
+                'Chilopoda' = Chil,
+                'Araneae' = Spider,
+                'Carabidae' = AC,
+                'Other Coleoptera' = OAC,
+                'Hymenoptera' = hymen,
+                'Acari' = mites,
+                'Diplura' = diplura,
+                'Larvae' = larvae,
+                'Hemiptera' = hemiptera,
+                'Holo Insects' = adult,
+                'Thysanoptera' = Thrips,
+                'Symphyla' = symph_tot
+                ) %>% 
+  mutate(treatment = paste(trt, '-', tillage),
+                 treatment = as.factor(treatment)) %>% 
+  select(-trt, -tillage)
+colnames(rodale_ord_df)
+
+new_arth_groups <- rodale_ord_df[,3:23]
+
+
+ord_2 <- metaMDS(new_arth_groups, k = 2)
+ord_2$stress # 0.23
+stressplot(ord_2)
+
+# going to use this one
+ord_3 <- metaMDS(new_arth_groups, k = 3)
+ord_3$stress # 0.163
+stressplot(ord_3)
+
+
+# need to get site scores for ordination
+# I think I want display  = "sites"
+?scores
+scrs <- scores(ord_3, display = "sites")
+# adding my scores from metaMDS to their associated trts 
+scrs <- cbind(as.data.frame(scrs), trt = rodale_nmds$treatment)
+scrs <- cbind(as.data.frame(scrs), date = rodale_nmds$date)
+
+# i want to add functional group to this df 
+# "species" = averaged site scores
+# as_tibble here gets rid of the name and replaces the groups with numbers != what I want
+functional_scores <- as.data.frame(scores(ord_3, "species"))
+functional_scores$species <- rownames(functional_scores)
+
+unique(rodale_nmds$treatment)
+# going to chull the objects to get trts into their own shapes
+CWW_NT <- scrs[scrs$trt == "CWW - NT",][chull(scrs[scrs$trt == "CWW - NT",c("NMDS1", "NMDS2", "NMDS3")]),]
+CWW_T <- scrs[scrs$trt == "CWW - T",][chull(scrs[scrs$trt == "CWW - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OL_T <- scrs[scrs$trt == "OL - T",][chull(scrs[scrs$trt == "OL - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OL_NT <- scrs[scrs$trt == "OL - NT",][chull(scrs[scrs$trt == "OL - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+OM_T <- scrs[scrs$trt == "OM - T",][chull(scrs[scrs$trt == "OM - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OM_NT <- scrs[scrs$trt == "OM - NT",][chull(scrs[scrs$trt == "OM - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+CCC_NT <- scrs[scrs$trt == "CCC - NT",][chull(scrs[scrs$trt == "CCC - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+CCC_T <- scrs[scrs$trt == "CCC - T",][chull(scrs[scrs$trt == "CCC - T",c("NMDS1", "NMDS2","NMDS3")]),]
+
+
+hull.data <- rbind(CWW_NT, CWW_T, CCC_NT,CCC_T,OL_NT,OL_T,OM_NT, OM_T)
+as_tibble(hull.data)  #trt = factor
+hull.data$trt <- as.factor(hull.data$trt)
+library(ggrepel)
+library(RColorBrewer)
+
+display.brewer.all(colorblindFriendly = TRUE)
+
+
+nmds_all <- ggplot()+
+  geom_polygon(data = hull.data, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  # scale_fill_manual(name = "Treatment", labels = c('CWW_NT','CWW_T','OL_T','OL_NT','OM_T','OM_NT','CCC_T'))+
+  geom_segment(data = functional_scores, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2), 
+                                             arrow = arrow(length = unit(0.25, "cm")),
+               color = "grey10", lwd = 0.3)+
+  geom_text_repel(data = functional_scores, aes(x = NMDS1, y = NMDS2, label = species), cex = 8, direction = "both",
+                  segment.size = 0.25)+
+  annotate("label", x = 0, y=.5, label ="Stress: X", size = 6)+
+  coord_equal()+
+  theme_bw()+
+  labs(title = "Microarthropod abundance by treatment")+
+  theme(axis.text.x = element_blank(),  # remove x-axis text
+        axis.text.y = element_blank(), # remove y-axis text
+        axis.ticks = element_blank(),  # remove axis ticks
+        axis.title.x = element_blank(), # remove x-axis labels
+        axis.title.y = element_blank(), # remove y-axis labels
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank(),  #remove minor-grid labels
+        plot.background = element_blank(),
+        plot.title = element_text(size = 22))+
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    legend.key.size = unit(1.5, 'cm')
+  )
+
+#### NO TILL
+nt_hull <- hull.data %>% 
+  subset(trt %in% c('CWW - NT','CCC - NT', 'OL - NT', 'OM - NT'))
+
+nmds_nt <- ggplot()+
+  geom_polygon(data = nt_hull, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  # scale_fill_manual(name = "Treatment", labels = c('CWW_NT','CWW_T','OL_T','OL_NT','OM_T','OM_NT','CCC_T'))+
+  geom_segment(data = functional_scores, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2), 
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "grey10", lwd = 0.3)+
+  geom_text_repel(data = functional_scores, aes(x = NMDS1, y = NMDS2, label = species), cex = 8, direction = "both",
+                  segment.size = 0.25)+
+  annotate("label", x = 0, y=.5, label ="Stress: X", size = 6)+
+  coord_equal()+
+  theme_bw()+
+  labs(title = "Microarthropod abundance by No-till treatment")+
+  theme(axis.text.x = element_blank(),  # remove x-axis text
+        axis.text.y = element_blank(), # remove y-axis text
+        axis.ticks = element_blank(),  # remove axis ticks
+        axis.title.x = element_blank(), # remove x-axis labels
+        axis.title.y = element_blank(), # remove y-axis labels
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank(),  #remove minor-grid labels
+        plot.background = element_blank(),
+        plot.title = element_text(size = 22))+
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    legend.key.size = unit(1.5, 'cm')
+)
+
+#### TILL
+till_hull <- hull.data %>% 
+  subset(trt %in% c('CWW - T','CCC - T','OL - T','OM - T' ))
+nmds_t <- ggplot()+
+  geom_polygon(data = till_hull, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  # scale_fill_manual(name = "Treatment", labels = c('CWW_NT','CWW_T','OL_T','OL_NT','OM_T','OM_NT','CCC_T'))+
+  geom_segment(data = functional_scores, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2), 
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "grey10", lwd = 0.3)+
+  geom_text_repel(data = functional_scores, aes(x = NMDS1, y = NMDS2, label = species), cex = 8, direction = "both",
+                  segment.size = 0.25)+
+  annotate("label", x = 0, y=.5, label ="Stress: X", size = 6)+
+  coord_equal()+
+  theme_bw()+
+  labs(title = "Microarthropod abundance by Till treatment")+
+  theme(axis.text.x = element_blank(),  # remove x-axis text
+        axis.text.y = element_blank(), # remove y-axis text
+        axis.ticks = element_blank(),  # remove axis ticks
+        axis.title.x = element_blank(), # remove x-axis labels
+        axis.title.y = element_blank(), # remove y-axis labels
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank(),  #remove minor-grid labels
+        plot.background = element_blank(),
+        plot.title = element_text(size = 22))+
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    legend.key.size = unit(1.5, 'cm')
+  )
+
+#### Organic
+organic_hull <- hull.data %>% 
+  subset(trt %in% c('OL - T','OM - T','OL - NT', 'OM - NT'))
+nmds_organic <- ggplot()+
+  geom_polygon(data = organic_hull, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  # scale_fill_manual(name = "Treatment", labels = c('CWW_NT','CWW_T','OL_T','OL_NT','OM_T','OM_NT','CCC_T'))+
+  geom_segment(data = functional_scores, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2), 
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "grey10", lwd = 0.3)+
+  geom_text_repel(data = functional_scores, aes(x = NMDS1, y = NMDS2, label = species), cex = 8, direction = "both",
+                  segment.size = 0.25)+
+  annotate("label", x = 0, y=.5, label ="Stress: X", size = 6)+
+  coord_equal()+
+  theme_bw()+
+  labs(title = "Microarthropod abundance by Organic treatment")+
+  theme(axis.text.x = element_blank(),  # remove x-axis text
+        axis.text.y = element_blank(), # remove y-axis text
+        axis.ticks = element_blank(),  # remove axis ticks
+        axis.title.x = element_blank(), # remove x-axis labels
+        axis.title.y = element_blank(), # remove y-axis labels
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank(),  #remove minor-grid labels
+        plot.background = element_blank(),
+        plot.title = element_text(size = 22))+
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    legend.key.size = unit(1.5, 'cm')
+  )
+
+#### Conventional 
+convetional_hull <- hull.data %>% 
+  subset(trt %in% c('CWW - T','CCC - T','CWW - NT','CCC - NT'))
+nmds_conv <- ggplot()+
+  geom_polygon(data = convetional_hull, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  # scale_fill_manual(name = "Treatment", labels = c('CWW_NT','CWW_T','OL_T','OL_NT','OM_T','OM_NT','CCC_T'))+
+  geom_segment(data = functional_scores, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2), 
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "grey10", lwd = 0.3)+
+  geom_text_repel(data = functional_scores, aes(x = NMDS1, y = NMDS2, label = species), cex = 8, direction = "both",
+                  segment.size = 0.25)+
+  annotate("label", x = 0, y=.5, label ="Stress: X", size = 6)+
+  coord_equal()+
+  theme_bw()+
+  labs(title = "Microarthropod abundance by Conventional treatment")+
+  theme(axis.text.x = element_blank(),  # remove x-axis text
+        axis.text.y = element_blank(), # remove y-axis text
+        axis.ticks = element_blank(),  # remove axis ticks
+        axis.title.x = element_blank(), # remove x-axis labels
+        axis.title.y = element_blank(), # remove y-axis labels
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank(),  #remove minor-grid labels
+        plot.background = element_blank(),
+        plot.title = element_text(size = 22))+
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    legend.key.size = unit(1.5, 'cm')
+  )
+
 
 # Shannon index ####
 
