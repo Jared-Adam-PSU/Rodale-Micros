@@ -130,14 +130,52 @@ permanova_all
 
 
 # NMDS ####
-
+rodale_nmds<- rodale_clean %>% 
+mutate(treatment = paste(trt, '-', tillage),
+       treatment = as.factor(treatment))
 # running two fits: k = 2 and 3
 ord_2 <- metaMDS(arth_groups, k = 2)
 ord_2$stress # 0.23
 stressplot(ord_2)
+
+# going to use this one
 ord_3 <- metaMDS(arth_groups, k = 3)
 ord_3$stress # 0.17
 stressplot(ord_3)
+
+
+# need to get site scores for ordination
+# I think I want display  = "sites"
+?scores
+scrs <- scores(ord_3, display = "sites")
+# adding my scores from metaMDS to their associated trts 
+scrs <- cbind(as.data.frame(scrs), trt = rodale_nmds$treatment)
+scrs <- cbind(as.data.frame(scrs), date = rodale_nmds$date)
+
+# i want to add functional group to this df 
+# "species" = averaged site scores
+# as_tibble here gets rid of the name and replaces the groups with numbers != what I want
+functional_scores <- as.data.frame(scores(ord_3, "species"))
+functional_scores$species <- rownames(functional_scores)
+
+unique(rodale_nmds$treatment)
+# going to chull the objects to get trts into their own shapes
+CWW_NT <- scrs[scrs$trt == "CWW - NT",][chull(scrs[scrs$trt == "CWW - NT",c("NMDS1", "NMDS2", "NMDS3")]),]
+CWW_T <- scrs[scrs$trt == "CWW - T",][chull(scrs[scrs$trt == "CWW - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OL_T <- scrs[scrs$trt == "OL - T",][chull(scrs[scrs$trt == "OL - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OL_NT <- scrs[scrs$trt == "OL - NT",][chull(scrs[scrs$trt == "OL - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+OM_T <- scrs[scrs$trt == "OM - T",][chull(scrs[scrs$trt == "OM - T",c("NMDS1", "NMDS2","NMDS3")]),]
+OM_NT <- scrs[scrs$trt == "OM - NT",][chull(scrs[scrs$trt == "OM - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+CCC_NT <- scrs[scrs$trt == "CCC - NT",][chull(scrs[scrs$trt == "CCC - NT",c("NMDS1", "NMDS2","NMDS3")]),]
+CCC_T <- scrs[scrs$trt == "CCC - T",][chull(scrs[scrs$trt == "CCC - T",c("NMDS1", "NMDS2","NMDS3")]),]
+
+
+hull.data <- rbind(CWW_NT, CWW_T, CCC_NT,CCC_T,OL_NT,OL_T,OM_NT, OM_T)
+as_tibble(hull.data) %>% #trt = factor
+  select(-site)
+hull.data$trt <- as.factor(hull.data$trt)
+library(ggrepel)
+
 
 
 
@@ -284,6 +322,10 @@ qqnorm(residuals(glm_tillage))
 
 # Shannon index ####
 
+# I do not know if I need this diversity index
+  # would permanova and taxon scores suffice? 
+  # moving on from this for now 12/21/2023
+
 # following along with a tutorial 
 # https://www.flutterbys.com.au/stats/tut/tut13.2.html
 
@@ -291,18 +333,29 @@ colnames(rodale_totals)
 rodale_shannon <- rodale_totals %>% 
   mutate(treatment = paste(trt, '-', tillage),
          treatment = as.factor(treatment)) %>% 
-  select(-trt, -tillage)
+  subset(date == '7/28/2023') %>% 
+  select(-trt, -tillage, -total_arth, -date, -plot)
 colnames(rodale_shannon)
-library(plyr)
+
+####
+# testing the transpose function to get this df 
+tester_df <- as.data.frame(t(rodale_shannon[,-31]))
+colnames(tester_df) <- rodale_shannon$treatment
+s_test <- apply(tester_df>0,1,sum)
+tester_div <- diversity(tester_df, index = 'shannon')
+plot(tester_div)
+
+
+test_shannon <- data.matrix(rodale_shannon) %>% 
+  t() %>% 
+  as.data.frame() 
+
 # sum up the number of non-zero entries per row
 # ignore the first two columns cuz they aint numbas 
 
-?ddply
-ddply(rodale_totals, ~trts, function(x){
-  data.frame(richness = sum(x[3:33]>0))
-})
-ddply(rodale_totals,~Sites,function(x) {
-  data.frame(RICHNESS=sum(x[3:33]>0))
-})
+####
+s <- apply(test_shannon[1:30,]>0,1,sum) # all values that are above 1
+div_test <- diversity(test_shannon[-31,], index = 'shannon') #removing the treatment column to calculate values
+print(div_test)
+plot(div_test)
 
-apply(rodale_totals[,3:33]>0,1,sum)
