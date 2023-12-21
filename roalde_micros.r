@@ -221,6 +221,7 @@ rodale_scores <- rodale_aggregate %>%
 colnames(rodale_scores)
 
 # adding these columns into one total score column
+# combining trt and tillage
 rodale_final <- rodale_scores %>% 
   mutate(total_score = select(.,6:25) %>% 
          rowSums(na.rm = TRUE)) %>% 
@@ -228,32 +229,58 @@ rodale_final <- rodale_scores %>%
   mutate(treatment = paste(trt, '-', tillage),
          treatment = as.factor(treatment))
 
-ggplot(mean_scores, aes(x = treatment, y = total_score, fill = date))+
-  geom_boxplot()
-
+###
+##
+#
+# mean scores
 mean_scores <- rodale_final %>%
   select(-tillage, -trt, -plot) %>% 
   arrange(date, treatment)  %>% 
   group_by(treatment, date) %>% 
-  summarize(avg = mean(total_score)) %>% 
+  dplyr::summarize(avg = mean(total_score)) %>% #plyr has summarize
   print(n = Inf)
 
+ggplot(mean_scores, aes(x = treatment, y = total_score, fill = date))+
+  geom_boxplot()
+
+# stats begin: this is done with mean scores df
 # ANOVA 
 # date is significant 
-test_model <- aov(avg ~ treatment + date, data = mean_scores)
-summary(test_model)
-hist(residuals(test_model)) # look good
+mean_model_1 <- aov(avg ~ treatment + date, data = mean_scores)
+summary(mean_model_1)
+hist(residuals(mean_model_1)) # look good
 ?TukeyHSD
-TukeyHSD(test_model)
+TukeyHSD(mean_model_1)
 
 #nothing sig here becuase date is excluded 
-test_model_2 <- aov(avg ~ treatment, data = mean_scores)
-summary(test_model_2)
+mean_model_2 <- aov(avg ~ treatment, data = mean_scores)
+summary(mean_model_2)
 
-glm_test <- glm(avg ~ treatment + date, data = mean_scores)
-summary(glm_test)
-hist(residuals(glm_test))
+glm_mean <- glm(avg ~ treatment + date, data = mean_scores)
+summary(glm_mean)
+hist(residuals(glm_mean))
+#
+##
+###
 
+# separating trt and tillage
+rodale_tillage <- rodale_final %>% 
+  select(-plot, -treatment) %>% 
+  arrange(date, trt) %>% 
+  group_by(date, trt, tillage) %>% 
+  dplyr::summarize(avg = mean(total_score)) %>%
+  print(n = Inf) 
+
+# stats with tillage separated 
+tillage_model <- aov(avg ~ tillage , data = rodale_tillage)
+summary(tillage_model)
+hist(residuals(tillage_model))
+qqnorm(residuals(tillage_model))
+
+glm_tillage <- glm(avg ~ tillage + date, data = rodale_tillage)
+summary(glm_tillage)
+hist(residuals(glm_tillage))
+qqnorm(residuals(glm_tillage))
 
 # Shannon index ####
 
