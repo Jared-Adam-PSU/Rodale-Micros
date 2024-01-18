@@ -9,6 +9,8 @@
 
 library(tidyverse)
 library(vegan)
+library(lme4)
+library(performance)
 
 # Load in data and explore ####
 rodale <- as_tibble(Rodale_counts)
@@ -123,12 +125,12 @@ colnames(rodale_totals)
 rodale_aggregate <- rodale_totals %>% 
   mutate(mites = Orb + Norb,
          diplura = Japy + Camp,
-         collembola = Sym + Ento,
+         #collembola = Sym + Ento,
          larvae = CL + OL + neuroptera,
          hemiptera = hemip + Enich,
          adult = Adipt + lep + Siphon,
          symph_tot = Simphyla + Scolopendrellida) %>% 
-  select(-Orb, -Norb, -Japy, -Camp, -Sym, -Ento, -CL, -OL, -hemip, -Enich,
+  select(-Orb, -Norb, -Japy, -Camp, -CL, -OL, -hemip, -Enich,
          -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida)
   
 
@@ -137,13 +139,21 @@ rodale_aggregate <- rodale_totals %>%
   # individual if_else statements for each column?
     # if(x >= 1) {score = #} else {score = 0}?
     # OR if_else(x >= #, 20) # THIS ONE
+
+# old: 
 # the only concern is with colembolans
 # Podo get 20
 # ento and sym get 10, in general
-
-## 1/18/2024 revision: Take out entomo and make them 6 points(typically hemi)
-
 # will combine ento and sym, but keep podo separate 
+# 
+
+# new: 
+# 1/18/2024 revision: Take out entomo and make them 6 points(typically hemi)
+# Podo get 20
+# sym get 10 
+# ento get 6 
+#
+
 # NEED to revisit coleoptera, for now giving them all 10 and carabids 1
 # dip = 5
 # chil = 10
@@ -179,16 +189,18 @@ rodale_scores <- rodale_aggregate %>%
          chil_score = if_else(Chil >= 1, 10, 0), 
          diplo_score = if_else(Dip >= 1, 5, 0), 
          symph_score = if_else(symph_tot >= 1, 20, 0), 
-         eu_ed_col_score = if_else(collembola >= 1, 10, 0), 
-         podo_score = if_else(Pod >= 1, 20, 0),
+         hemi_ed_score = if_else(Ento >= 1, 6, 0),
+         hemi_eu_ed_col_score = if_else(Sym >= 1, 10, 0), 
+         ed_col_score = if_else(Pod >= 1, 20, 0),
          adult_score = if_else(adult >= 1, 1, 0),
          pauropod_score = if_else(Pauropoda >= 1, 20, 0)) %>% 
    select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -OAC, -AC, -hymen,
           -Formicid, -larvae, -Spider, -Pseu, -Iso, -Chil, -Dip, -symph_tot,
-          -collembola, -Pod, -neuroptera, -adult, -Pauropoda, -Annelid)
+          -Ento, -Sym, -Pod, -neuroptera, -adult, -Pauropoda, -Annelid)
 
 colnames(rodale_scores)
 
+unique(rodale_scores$plot)
 # adding these columns into one total score column
 # combining trt and tillage
 rodale_final <- rodale_scores %>% 
@@ -196,7 +208,15 @@ rodale_final <- rodale_scores %>%
          rowSums(na.rm = TRUE)) %>% 
   select(date, plot, trt, tillage, total_score) %>% 
   mutate(treatment = paste(trt, '-', tillage),
-         treatment = as.factor(treatment))
+         treatment = as.factor(treatment)) %>% 
+  mutate(block = case_when(plot %in% c(111,122,131,133) ~ 1,
+                           plot %in% c(211,222,231,233) ~ 2, 
+                           plot %in% c(311,322,331,333) ~ 3, 
+                           plot %in% c(411,422,431,433) ~ 4,
+                           plot %in% c(511,522,531,533) ~ 5,
+                           plot %in% c(611,622,631,633) ~ 6, 
+                           plot %in% c(711,722,731,733) ~ 7, 
+                           plot %in% c(811,822,831,833) ~ 8))
 
 ###
 ##
@@ -209,7 +229,7 @@ mean_scores <- rodale_final %>%
   dplyr::summarize(avg = mean(total_score)) %>% #plyr has summarize
   print(n = Inf)
 
-ggplot(mean_scores, aes(x = treatment, y = total_score, fill = date))+
+ggplot(mean_scores, aes(x = treatment, y = avg, fill = date))+
   geom_boxplot()
 
 # stats begin: this is done with mean scores df
@@ -228,6 +248,24 @@ summary(mean_model_2)
 glm_mean <- glm(avg ~ treatment + date, data = mean_scores)
 summary(glm_mean)
 hist(residuals(glm_mean))
+
+# need to add a blocking factor (added above with rodale final)
+rodale_glmer <- rodale_final %>% 
+  select(date, plot, total_score, treatment, block) %>% 
+  mutate(date = as.factor(date), 
+         plot = as.factor(plot), 
+         block = as.factor(block))
+
+glmer_model <- glmer(total_score ~ treatment + 
+                       (1|block/ plot) + (1|date), 
+                     data = rodale_glmer, 
+                    family = poisson)
+summary(glmer_model)
+r2_nakagawa(glmer_model)
+# r2_nakagawa(glmer_model, by_group = TRUE)
+rodale_residuals <- binned_residuals(glmer_model)
+plot(rodale_residuals)
+
 #
 ##
 ###
