@@ -255,15 +255,35 @@ rodale_glmer <- rodale_final %>%
   mutate(date = as.factor(date), 
          plot = as.factor(plot), 
          block = as.factor(block))
+# look at overdispersion: variance > mean?
+dispersion_stats <- rodale_glmer %>% 
+  group_by(treatment) %>%
+  summarise(
+  mean = mean(total_score),
+  variances = var(total_score),
+  ratio = variances/mean)
 
-glmer_model <- glmer(total_score ~ treatment + 
-                       (1|block/ plot) + (1|date), 
+
+# let's see which is better, poisson or nb? 
+# run one of each where the only difference is the family 
+library(lmtest)
+library(MASS)
+poisson_model <- glmer(total_score ~ treatment + 
+                       (1|block) + (1|date), 
                      data = rodale_glmer, 
                     family = poisson)
-summary(glmer_model)
-r2_nakagawa(glmer_model)
+
+nb_model_trt <- glmer.nb(total_score ~ treatment + 
+                       (1|block) + (1|date), 
+                     data = rodale_glmer) 
+
+lrtest(poisson_model,nb_model_trt)
+# the negative binomial has the higher likelihood score, so we will use that
+
+summary(nb_model_trt)
+r2_nakagawa(nb_model_trt) #wont provide conditional with plot in random effect
 # r2_nakagawa(glmer_model, by_group = TRUE)
-rodale_residuals <- binned_residuals(glmer_model)
+rodale_residuals <- binned_residuals(nb_model_trt)
 plot(rodale_residuals)
 
 #
@@ -288,6 +308,23 @@ glm_tillage <- glm(avg ~ tillage + date, data = rodale_tillage)
 summary(glm_tillage)
 hist(residuals(glm_tillage))
 qqnorm(residuals(glm_tillage))
+
+# glmer for trt
+# this seems like a bad model, based on the r2 and other performance analytics
+rodale_tillage_glmer <- rodale_final %>% 
+  select(-treatment) %>% 
+  arrange(date, trt)
+
+tillage_glmer <- glmer.nb(total_score ~ tillage + trt +
+                         (1|block/plot) + (1|date), 
+                       data = rodale_tillage_glmer)
+
+summary(tillage_glmer)
+r2_nakagawa(tillage_glmer)
+r2_nakagawa(tillage_glmer, by_group = TRUE)
+tillage_residuals <- binned_residuals(tillage_glmer)
+tillage_residuals
+
 
 # Permanova ####
 arth_groups <- rodale_totals[,3:32]
