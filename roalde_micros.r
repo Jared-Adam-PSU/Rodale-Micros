@@ -139,8 +139,11 @@ rodale_aggregate <- rodale_totals %>%
     # OR if_else(x >= #, 20) # THIS ONE
 # the only concern is with colembolans
 # Podo get 20
-# ento and sym get 10, in general 
-# will combine ento and sym, but keep podo separate
+# ento and sym get 10, in general
+
+## 1/18/2024 revision: Take out entomo and make them 6 points(typically hemi)
+
+# will combine ento and sym, but keep podo separate 
 # NEED to revisit coleoptera, for now giving them all 10 and carabids 1
 # dip = 5
 # chil = 10
