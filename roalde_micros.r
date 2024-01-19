@@ -129,9 +129,10 @@ rodale_aggregate <- rodale_totals %>%
          larvae = CL + OL + neuroptera,
          hemiptera = hemip + Enich,
          adult = Adipt + lep + Siphon,
-         symph_tot = Simphyla + Scolopendrellida) %>% 
+         symph_tot = Simphyla + Scolopendrellida,
+         coleop = OAC + AC) %>% 
   select(-Orb, -Norb, -Japy, -Camp, -CL, -OL, -hemip, -Enich,
-         -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida)
+         -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida, -OAC, -AC)
   
 
 # 2: adding the scores
@@ -178,8 +179,7 @@ rodale_scores <- rodale_aggregate %>%
          dip_score = if_else(diplura >= 1, 20, 0),
          hemip_score = if_else(hemiptera >= 1, 1, 0), #1 unless cicada larvae 
          thrips_score = if_else(Thrips >= 1, 1, 0),
-         coleop_score = if_else(OAC >= 1, 10, 0),
-         carabid_score = if_else(AC >= 1, 1, 0),
+         coleop_score = if_else(coleop >= 1, 1, 0),
          hymen_score = if_else(hymen >= 1, 1, 0),
          formic_score = if_else(Formicid >= 1, 5, 0), 
          larvae_score = if_else(larvae >= 1, 10, 0),
@@ -194,7 +194,7 @@ rodale_scores <- rodale_aggregate %>%
          ed_col_score = if_else(Pod >= 1, 20, 0),
          adult_score = if_else(adult >= 1, 1, 0),
          pauropod_score = if_else(Pauropoda >= 1, 20, 0)) %>% 
-   select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -OAC, -AC, -hymen,
+   select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -coleop, -hymen,
           -Formicid, -larvae, -Spider, -Pseu, -Iso, -Chil, -Dip, -symph_tot,
           -Ento, -Sym, -Pod, -neuroptera, -adult, -Pauropoda, -Annelid)
 
