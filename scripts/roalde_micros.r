@@ -11,11 +11,6 @@ library(tidyverse)
 library(vegan)
 library(lme4)
 library(performance)
-library(lmtest)
-library(MASS)
-library(multcomp)
-library(ggrepel)
-library(RColorBrewer)
 
 # Load in data and explore ####
 rodale <- as_tibble(Rodale_counts)
@@ -24,13 +19,42 @@ rodale <- as_tibble(Rodale_counts)
 # Till plots: 200, 500, 700, 800
 # No-till plots: 100, 300, 400, 600
 
+###
+##
+#
+# Stuff I tried that worked but I did not use for final code 
+?case_when
+?str_sub
+?str_detect
+# going to add a blank column for trt then add case_when 
+# test <- rodale
+# test[, 'trt'] = NA
+# 
+# # testing out str_sub to find locations 
+# str_sub(rodale$plot, start = 1 | 3, end = 1 | 3) == c(1,3)
+# rm(test_2)
+# # using str_sub_all
+# test_2 <- test %>% 
+#   mutate(trt = case_when(
+#    str_sub_all(plot, start = 1, end = 1) == 1 ~ "NT",
+#    
+#   ))
+# # did this work? 
+# test_2 %>% 
+#   select(plot, trt) %>% 
+#   print(n = Inf)
+#
+##
+###
+
+
 # This is the route I am going with 
 rodale_trt <- rodale %>%
   mutate(tillage = c('NT', 'T')[1+str_detect(plot, "^[1 | 3 | 4 | 6]")])
 
 # did this work? : yes
 rodale_trt %>% 
-  dplyr::select(plot, tillage) %>% 
+  select(plot, tillage) %>% 
   filter(tillage == "NT") %>% 
   arrange(desc(plot)) %>% 
   print(n = Inf)
@@ -48,7 +72,7 @@ rodale_clean <- rodale_trt %>%
                               plot %in% c(131,231,331,431,531,631,731,831) ~ 'CWW',
                               plot %in% c(133,233,333,433,533,633,733,833) ~ 'CCC'))
 rodale_clean %>% 
-  dplyr::select(tillage, plot, trt) %>% 
+  select(tillage, plot, trt) %>% 
   print(n = Inf)
 
 ###
@@ -67,7 +91,7 @@ rodale_clean %>%
 
 # create column for all arthropoda
 rodale_totals <- rodale_clean %>% 
-  mutate(total_arth = dplyr::select(.,3:32) %>% # add across all rows from columns 3 through 32
+  mutate(total_arth = select(.,3:32) %>% # add across all rows from columns 3 through 32
            rowSums(na.rm = TRUE))
 rodale_totals$total_arth
 
@@ -107,7 +131,7 @@ rodale_aggregate <- rodale_totals %>%
          adult = Adipt + lep + Siphon,
          symph_tot = Simphyla + Scolopendrellida,
          coleop = OAC + AC) %>% 
-  dplyr::select(-Orb, -Norb, -Japy, -Camp, -CL, -OL, -hemip, -Enich,
+  select(-Orb, -Norb, -Japy, -Camp, -CL, -OL, -hemip, -Enich,
          -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida, -OAC, -AC)
   
 
@@ -170,7 +194,7 @@ rodale_scores <- rodale_aggregate %>%
          ed_col_score = if_else(Pod >= 1, 20, 0),
          adult_score = if_else(adult >= 1, 1, 0),
          pauropod_score = if_else(Pauropoda >= 1, 20, 0)) %>% 
-   dplyr::select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -coleop, -hymen,
+   select(-mites, -Protura, -diplura, -hemiptera, -Thrips, -coleop, -hymen,
           -Formicid, -larvae, -Spider, -Pseu, -Iso, -Chil, -Dip, -symph_tot,
           -Ento, -Sym, -Pod, -neuroptera, -adult, -Pauropoda, -Annelid)
 
@@ -180,9 +204,9 @@ unique(rodale_scores$plot)
 # adding these columns into one total score column
 # combining trt and tillage
 rodale_final <- rodale_scores %>% 
-  mutate(total_score = dplyr::select(.,6:25) %>% 
+  mutate(total_score = select(.,6:25) %>% 
          rowSums(na.rm = TRUE)) %>% 
-  dplyr::select(date, plot, trt, tillage, total_score) %>% 
+  select(date, plot, trt, tillage, total_score) %>% 
   mutate(treatment = paste(trt, '-', tillage),
          treatment = as.factor(treatment)) %>% 
   mutate(block = case_when(plot %in% c(111,122,131,133) ~ 1,
@@ -199,55 +223,38 @@ rodale_final <- rodale_scores %>%
 #
 # mean scores
 mean_scores <- rodale_final %>%
-  dplyr::select(-tillage, -trt, -plot) %>% 
+  select(-tillage, -trt, -plot) %>% 
   arrange(date, treatment)  %>% 
   group_by(treatment, date) %>% 
-  summarise(avg = mean(total_score)) %>% #plyr has summarize
+  dplyr::summarize(avg = mean(total_score)) %>% #plyr has summarize
   print(n = Inf)
 
 ggplot(mean_scores, aes(x = treatment, y = avg, fill = date))+
-  geom_bar(stat = 'identity', position = 'dodge')
+  geom_boxplot()
 
-# stats #### 
+# stats begin: this is done with mean scores df
+# ANOVA 
+# date is significant 
+mean_model_1 <- aov(avg ~ treatment + date, data = mean_scores)
+summary(mean_model_1)
+hist(residuals(mean_model_1)) # look good
+?TukeyHSD
+TukeyHSD(mean_model_1)
+
+#nothing sig here becuase date is excluded 
+mean_model_2 <- aov(avg ~ treatment, data = mean_scores)
+summary(mean_model_2)
+
+glm_mean <- glm(avg ~ treatment + date, data = mean_scores)
+summary(glm_mean)
+hist(residuals(glm_mean))
 
 # need to add a blocking factor (added above with rodale final)
 rodale_glmer <- rodale_final %>% 
-  dplyr::select(date, plot, total_score, treatment, block) %>% 
+  select(date, plot, total_score, treatment, block) %>% 
   mutate(date = as.factor(date), 
          plot = as.factor(plot), 
          block = as.factor(block))
-
-# begin: this is done with mean scores df
-# ANOVA 
-# date is significant 
-m1 <- aov(total_score ~ treatment + date, data = rodale_glmer)
-summary(m1)
-hist(residuals(m1)) # look good
-TukeyHSD(m1)
-# $date
-# diff      lwr      upr     p adj
-# 7/28/2023-10/11/2023 23.3256 11.48962 35.16159 0.0002275
-
-#nothing sig here becuase date is excluded 
-m2 <- aov(total_score ~ treatment, data = rodale_glmer)
-summary(m2)
-
-# glm to confirm no differences among treatments
-m3 <- glm(total_score ~ treatment + date, data = rodale_glmer)
-summary(m3)
-hist(residuals(m3))
-cld(emmeans(m3, ~treatment), Letters = letters)
-# treatment emmean   SE df lower.CL upper.CL .group
-# OL - NT     44.6 8.28 54     28.0     61.2  a    
-# CCC - NT    57.2 8.28 54     40.6     73.9  a    
-# CWW - T     63.1 8.28 54     46.5     79.7  a    
-# OM - T      63.8 8.86 54     46.0     81.5  a    
-# OM - NT     67.0 8.28 54     50.4     83.6  a    
-# CWW - NT    68.2 8.28 54     51.6     84.9  a    
-# OL - T      71.2 8.28 54     54.6     87.9  a    
-# CCC - T     75.0 8.28 54     58.4     91.6  a    
-
-# glmer
 # look at overdispersion: variance > mean?
 dispersion_stats <- rodale_glmer %>% 
   group_by(treatment) %>%
@@ -257,19 +264,27 @@ dispersion_stats <- rodale_glmer %>%
   ratio = variances/mean)
 
 
-#singular fit with blocking variable
-# removed block and switch to fixed effects only 
+# let's see which is better, poisson or nb? 
+# run one of each where the only difference is the family 
+library(lmtest)
+library(MASS)
+poisson_model <- glmer(total_score ~ treatment + 
+                       (1|block) + (1|date), 
+                     data = rodale_glmer, 
+                    family = poisson)
 
+nb_model_trt <- glmer.nb(total_score ~ treatment + 
+                       (1|block) + (1|date), 
+                     data = rodale_glmer) 
 
-glm1 <- glm.nb(total_score ~ date,
-                         data = rodale_glmer) 
-summary(glmer1)
-hist(residuals(glm1))
+lrtest(poisson_model,nb_model_trt)
+# the negative binomial has the higher likelihood score, so we will use that
 
-cld(emmeans(glm1, ~date), Letters = letters)
-# date       emmean     SE  df asymp.LCL asymp.UCL .group
-# 10/11/2023   3.95 0.0799 Inf      3.80      4.11  a    
-# 7/28/2023    4.32 0.0775 Inf      4.17      4.48   b   
+summary(nb_model_trt)
+r2_nakagawa(nb_model_trt) #wont provide conditional with plot in random effect
+# r2_nakagawa(glmer_model, by_group = TRUE)
+rodale_residuals <- binned_residuals(nb_model_trt)
+plot(rodale_residuals)
 
 #
 ##
@@ -277,37 +292,38 @@ cld(emmeans(glm1, ~date), Letters = letters)
 
 # separating trt and tillage
 rodale_tillage <- rodale_final %>% 
-  dplyr::select(-treatment) %>% 
-  arrange(date, trt, tillage, block) %>%
-  mutate_at(vars(1:4), as.factor) %>% 
-  mutate(block = as.factor(block)) %>% 
+  select(-plot, -treatment) %>% 
+  arrange(date, trt) %>% 
+  group_by(date, trt, tillage) %>% 
+  dplyr::summarize(avg = mean(total_score)) %>%
   print(n = Inf) 
 
 # stats with tillage separated 
-tillage_model <- aov(total_score ~ tillage , data = rodale_tillage)
+tillage_model <- aov(avg ~ tillage , data = rodale_tillage)
 summary(tillage_model)
 hist(residuals(tillage_model))
 qqnorm(residuals(tillage_model))
 
-glm_tillage <- glm(total_score ~ tillage + date, data = rodale_tillage)
+glm_tillage <- glm(avg ~ tillage + date, data = rodale_tillage)
 summary(glm_tillage)
 hist(residuals(glm_tillage))
 qqnorm(residuals(glm_tillage))
 
+# glmer for trt
+# this seems like a bad model, based on the r2 and other performance analytics
+rodale_tillage_glmer <- rodale_final %>% 
+  select(-treatment) %>% 
+  arrange(date, trt)
 
-tillage_glmer <- glmer.nb(total_score ~ tillage +
-                         (1|date), 
-                       data = rodale_tillage)
+tillage_glmer <- glmer.nb(total_score ~ tillage + trt +
+                         (1|block/plot) + (1|date), 
+                       data = rodale_tillage_glmer)
 
 summary(tillage_glmer)
 r2_nakagawa(tillage_glmer)
+r2_nakagawa(tillage_glmer, by_group = TRUE)
 tillage_residuals <- binned_residuals(tillage_glmer)
-plot(tillage_residuals)
-
-cld(emmeans(tillage_glmer, ~tillage), Letters = letters)
-# tillage emmean    SE  df asymp.LCL asymp.UCL .group
-# NT        4.08 0.139 Inf      3.80      4.35  a    
-# T         4.20 0.140 Inf      3.93      4.47  a 
+tillage_residuals
 
 
 # Permanova ####
@@ -326,40 +342,30 @@ permanova_date
 permanova_tillage <- adonis2(dist ~ tillage, permutations = 999, method = "bray", data = rodale_totals)
 permanova_tillage
 
-permanova_all <- adonis2(dist ~ date + trt + tillage, permutations = factorial(10), method = "bray", data = rodale_totals)
+permanova_all <- adonis2(dist ~ date*trt*tillage, permutations = 999, method = "bray", data = rodale_totals)
 permanova_all
-# Df SumOfSqs      R2      F   Pr(>F)   
-# date      1   0.6909 0.05133 3.3101 0.003356 **
-#   trt       3   0.6455 0.04796 1.0308 0.405608   
-# tillage   1   0.2257 0.01677 1.0812 0.348599   
-# Residual 57  11.8976 0.88394                   
-# Total    62  13.4597 1.00000  
+
 
 
 # NMDS ####
+# going to use taxon score df 
 
-rodale_aggregate <- rodale_totals %>% 
-  mutate(mites = Orb + Norb,
-         diplura = Japy + Camp,
-         #collembola = Sym + Ento,
-         larvae = CL + OL + neuroptera,
-         hemiptera = hemip + Enich,
-         adult = Adipt + lep + Siphon,
-         symph_tot = Simphyla + Scolopendrellida,
-         coleop = OAC + AC) %>% 
-  dplyr::select(-Orb, -Norb, -Japy, -Camp, -CL, -OL, -hemip, -Enich,
-                -Adipt, -lep, -Siphon, -Simphyla, -Scolopendrellida, -OAC, -AC)
+# rodale_nmds<- rodale_clean %>% 
+# mutate(treatment = paste(trt, '-', tillage),
+#        treatment = as.factor(treatment))
+# running two fits: k = 2 and 3
+colnames(rodale_nmds)
 
 colnames(rodale_aggregate)
 rodale_ord_df <- rodale_aggregate %>% 
-  dplyr::select(-total_arth, -neuroptera) %>% 
-  mutate(collembola = Sym +Ento) %>% 
+  select(-total_arth, -neuroptera) %>% 
   dplyr::rename('Eu-edaphic collembola' = Pod,
                 'Hemi-edpahic collembola' = collembola,
                 'Diplopoda' = Dip, 
                 'Chilopoda' = Chil,
                 'Araneae' = Spider,
-                'Coleoptera' = coleop,
+                'Carabidae' = AC,
+                'Other Coleoptera' = OAC,
                 'Hymenoptera' = hymen,
                 'Acari' = mites,
                 'Diplura' = diplura,
@@ -371,12 +377,10 @@ rodale_ord_df <- rodale_aggregate %>%
                 ) %>% 
   mutate(treatment = paste(trt, '-', tillage),
                  treatment = as.factor(treatment)) %>% 
-  dplyr::select(-trt, -tillage, - Sym, -Ento) %>% 
-  relocate(date, plot, treatment) %>% 
-  print(n = Inf)
+  select(-trt, -tillage)
 colnames(rodale_ord_df)
 
-new_arth_groups <- rodale_ord_df[,4:23]
+new_arth_groups <- rodale_ord_df[,3:23]
 
 
 ord_2 <- metaMDS(new_arth_groups, k = 2)
@@ -394,8 +398,8 @@ stressplot(ord_3)
 ?scores
 scrs <- scores(ord_3, display = "sites")
 # adding my scores from metaMDS to their associated trts 
-scrs <- cbind(as.data.frame(scrs), trt = rodale_ord_df$treatment)
-scrs <- cbind(as.data.frame(scrs), date = rodale_ord_df$date)
+scrs <- cbind(as.data.frame(scrs), trt = rodale_nmds$treatment)
+scrs <- cbind(as.data.frame(scrs), date = rodale_nmds$date)
 
 # i want to add functional group to this df 
 # "species" = averaged site scores
@@ -403,7 +407,7 @@ scrs <- cbind(as.data.frame(scrs), date = rodale_ord_df$date)
 functional_scores <- as.data.frame(scores(ord_3, "species"))
 functional_scores$species <- rownames(functional_scores)
 
-unique(rodale_ord_df$treatment)
+unique(rodale_nmds$treatment)
 # going to chull the objects to get trts into their own shapes
 CWW_NT <- scrs[scrs$trt == "CWW - NT",][chull(scrs[scrs$trt == "CWW - NT",c("NMDS1", "NMDS2", "NMDS3")]),]
 CWW_T <- scrs[scrs$trt == "CWW - T",][chull(scrs[scrs$trt == "CWW - T",c("NMDS1", "NMDS2","NMDS3")]),]
@@ -418,7 +422,8 @@ CCC_T <- scrs[scrs$trt == "CCC - T",][chull(scrs[scrs$trt == "CCC - T",c("NMDS1"
 hull.data <- rbind(CWW_NT, CWW_T, CCC_NT,CCC_T,OL_NT,OL_T,OM_NT, OM_T)
 as_tibble(hull.data)  #trt = factor
 hull.data$trt <- as.factor(hull.data$trt)
-
+library(ggrepel)
+library(RColorBrewer)
 
 display.brewer.all(colorblindFriendly = TRUE)
 
@@ -580,4 +585,44 @@ nmds_conv <- ggplot()+
     legend.text = element_text(size = 18),
     legend.key.size = unit(1.5, 'cm')
   )
+
+
+# Shannon index ####
+
+# I do not know if I need this diversity index
+  # would permanova and taxon scores suffice? 
+  # moving on from this for now 12/21/2023
+
+# following along with a tutorial 
+# https://www.flutterbys.com.au/stats/tut/tut13.2.html
+
+colnames(rodale_totals)
+rodale_shannon <- rodale_totals %>% 
+  mutate(treatment = paste(trt, '-', tillage),
+         treatment = as.factor(treatment)) %>% 
+  subset(date == '7/28/2023') %>% 
+  select(-trt, -tillage, -total_arth, -date, -plot)
+colnames(rodale_shannon)
+
+####
+# testing the transpose function to get this df 
+tester_df <- as.data.frame(t(rodale_shannon[,-31]))
+colnames(tester_df) <- rodale_shannon$treatment
+s_test <- apply(tester_df>0,1,sum)
+tester_div <- diversity(tester_df, index = 'shannon')
+plot(tester_div)
+
+
+test_shannon <- data.matrix(rodale_shannon) %>% 
+  t() %>% 
+  as.data.frame() 
+
+# sum up the number of non-zero entries per row
+# ignore the first two columns cuz they aint numbas 
+
+####
+s <- apply(test_shannon[1:30,]>0,1,sum) # all values that are above 1
+div_test <- diversity(test_shannon[-31,], index = 'shannon') #removing the treatment column to calculate values
+print(div_test)
+plot(div_test)
 
