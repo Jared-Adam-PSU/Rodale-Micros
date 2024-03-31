@@ -16,6 +16,7 @@ library(MASS)
 library(multcomp)
 library(ggrepel)
 library(RColorBrewer)
+library(plotly)
 
 # Load in data and explore ####
 rodale <- as_tibble(Rodale_counts)
@@ -422,7 +423,7 @@ hull.data$trt <- as.factor(hull.data$trt)
 
 display.brewer.all(colorblindFriendly = TRUE)
 
-
+# by treatment 
 nmds_all <- ggplot()+
   geom_polygon(data = hull.data, (aes(x = NMDS1, y = NMDS2, group = trt, fill = trt)), alpha = 0.5)+
   scale_fill_brewer(palette = 'Dark2')+
@@ -451,6 +452,14 @@ nmds_all <- ggplot()+
     legend.text = element_text(size = 18),
     legend.key.size = unit(1.5, 'cm')
   )
+
+# by date
+# looks bad in 2d, lets make this one 3d 
+plot <- plot_ly(hull.data, x = ~NMDS1, y = ~NMDS2, z = ~NMDS3, color = ~date, 
+        colors = c("#1B9E77","#E7298A"))
+plot <- plot %>% 
+  add_markers()
+plot
 
 #### NO TILL
 nt_hull <- hull.data %>% 
