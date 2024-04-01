@@ -17,7 +17,9 @@ library(multcomp)
 library(ggrepel)
 library(RColorBrewer)
 library(plotly)
-
+library(flextable)
+library(officer)
+devtools::install_github("davidgohel/officer")
 # Load in data and explore ####
 rodale <- as_tibble(Rodale_counts)
 
@@ -73,7 +75,7 @@ rodale_totals <- rodale_clean %>%
 rodale_totals$total_arth
 
 rodale_totals %>% 
-  group_by(date, plot, tillage) %>% 
+  group_by(date,tillage) %>% 
   summarise(
     mean = mean(total_arth),
     sd = sd(total_arth),
@@ -82,8 +84,120 @@ rodale_totals %>%
     IQr = IQR(total_arth)
   ) 
 
-# rodale_clean <- rodale %>% 
-#   mutate_across(as.factor(c('plot', 'date')))
+
+all_by_trt <- rodale_totals %>% 
+  relocate(date, plot, trt) %>% 
+  dplyr::select(-total_arth, -plot) %>% 
+  pivot_longer(cols = where(is.numeric)) %>% 
+  group_by(date, trt) %>% 
+  summarise(total = sum(value))
+
+all_by_name <- rodale_totals %>% 
+  relocate(date, plot, trt) %>% 
+  dplyr::select(-total_arth, -plot) %>% 
+  pivot_longer(cols = where(is.numeric)) %>% 
+  group_by(date, trt, name) %>% 
+  summarise(total = sum(value))%>% 
+  pivot_wider(names_from = name,
+              values_from = total) %>% 
+  arrange(date, trt) %>% 
+  dplyr::select(order(colnames(all_by_name))) %>% 
+  relocate(date, trt)
+
+rodale_table <- all_by_name %>% 
+  rename(Date = date,
+         Treatment = trt,
+         Oribatid = Orb, 
+         'Non-Oribatid' = Norb, 
+         Poduromorpha = Pod,
+         Symphypleona = Sym,  
+         Entomobryomoprha = Ento, 
+         Japygidae = Japy, 
+         Campodeidae = Camp, 
+         Chilopod = Chil, 
+         Diplopod = Dip,
+         Protura = Protura,
+         Pauropoda = Pauropoda,
+         Scolopendrellida = Scolopendrellida, 
+         Symphyla = Simphyla ,
+         'Carabidae' = AC,
+         'Other Coleoptera' = OAC,
+         'Coleoptera Larvae' = CL,
+          Enichocephalidae = Enich, 
+          Formicidae = Formicid, 
+        'Larvae' = OL, 
+         'Diptera' = Adipt, 
+         Siphonoptera = Siphon,
+         Araneomorophae = Spider, 
+         Thripidae = Thrips,
+         'Other Hemiptera' = hemip,
+         'Other Hymenoptera' = hymen, 
+         'Lepidoptera' = lep, 
+         Neuroptera = neuroptera ,
+        Annelid = Annelid) %>% 
+  relocate(Date,
+           Treatment ,
+           Oribatid , 
+           'Non-Oribatid', 
+           Poduromorpha,
+           Symphypleona ,  
+           Entomobryomoprha , 
+           Japygidae , 
+           Campodeidae , 
+           Chilopod , 
+           Diplopod ,
+           Protura ,
+           Pauropoda ,
+           Scolopendrellida , 
+           Symphyla  ,
+           'Carabidae' ,
+           'Other Coleoptera' ,
+           'Coleoptera Larvae' ,
+           Enichocephalidae , 
+           Formicidae , 
+           'Larvae' , 
+           'Diptera' , 
+           Siphonoptera ,
+           Araneomorophae , 
+           Thripidae ,
+           'Other Hemiptera' ,
+           'Other Hymenoptera' , 
+           'Lepidoptera' , 
+           Neuroptera ,
+           Annelid ) %>% 
+  dplyr::select(-Pseu, -Iso)
+table1 <- rodale_table[3:12]
+table2 <- rodale_table[13:22]
+table3 <- rodale_table[23:30]
+prev <- rodale_table[1:2]
+table1 <- cbind( prev,table1)
+table2 <- cbind(prev,table2 )
+table3 <- cbind(prev,table3 )
+
+table <- flextable(table1) 
+
+table <- rotate(table, j = 1:12, align = 'bottom', rotation = 'btlr', part = 'header')
+
+theme_zebra(table) %>% 
+  save_as_docx(path = 'Rodale micro table1.docx', orient = 'landscape')
+
+table2 <- flextable(table2) %>% 
+  autofit()
+
+table2 <- rotate(table2, j = 1:12, align = 'bottom', rotation = 'btlr', part = 'header')
+
+theme_zebra(table2) %>% 
+  flextable::save_as_docx(path = 'Rodale micro table2.docx', orient = 'landscape')
+
+table3 <- flextable(table3) %>% 
+  autofit()
+
+table3 <- rotate(table3, j = 1:10, align = 'bottom', rotation = 'btlr', part = 'header')
+
+theme_zebra(table3) %>% 
+  save_as_docx(path = 'Rodale micro table3.docx', orient = 'landscape')
+
+
 
 
 # Taxon Scores ####
