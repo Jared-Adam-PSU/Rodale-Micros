@@ -12,13 +12,17 @@ library(vegan)
 library(lme4)
 library(performance)
 library(MASS)
-library(lrtest)
+library(lmtest)
 library(emmeans)
 library(multcomp)
+library(flextable)
 
-# Load in data and explore ####
+# Load in data ####
 rodale <- as_tibble(Rodale_counts)
 
+grain <- grain_yield
+
+# and explore ####
 # Need to add in the till, no-till, organic, and conventional treatment identifiers
 # Till plots: 200, 500, 700, 800
 # No-till plots: 100, 300, 400, 600
@@ -96,8 +100,13 @@ rodale_clean %>%
 # create column for all arthropoda
 rodale_totals <- rodale_clean %>% 
   mutate(total_arth = dplyr::select(.,3:32) %>% # add across all rows from columns 3 through 32
-           rowSums(na.rm = TRUE))
+           rowSums(na.rm = TRUE)) 
 rodale_totals$total_arth
+
+rodale_totals %>% 
+  summarise(total = sum(total_arth))
+# 2556
+
 
 rodale_totals %>% 
   group_by(date, plot, tillage) %>% 
@@ -109,11 +118,194 @@ rodale_totals %>%
     IQr = IQR(total_arth)
   ) 
 
-# rodale_clean <- rodale %>% 
-#   mutate_across(as.factor(c('plot', 'date')))
 
 
-# Taxon Scores ####
+# Abundance cleaning ####
+abund_models <- rodale_totals %>% 
+  dplyr::select(date, plot, tillage, trt, total_arth) %>% 
+  mutate_at(vars(1:4), as.factor)
+
+# for paper 
+colnames(rodale_totals)
+table <- rodale_totals %>%
+  dplyr::select(-plot, -total_arth, - trt) %>% 
+  mutate(Acari = Orb + Norb,
+         Diplura = Japy + Camp,
+         'Other larvae' = OL + neuroptera,
+         Hemiptera = hemip + Enich,
+         Simphyla = Simphyla + Scolopendrellida
+         ) %>%
+  rename('Hemi-Eudaphic Collembola' = Sym,
+         'Epigeic Collembola' = Ento,
+         'Eudpahic Collembola' = Pod,
+         'Coleopter larave' = CL,
+         Diptera = Adipt,
+         Lepidoptera = lep,
+         Siphonoptera = Siphon,
+         Carabidae = AC,
+         'Other Coleoptera' = OAC,
+         Thysanoptera = Thrips,
+         Hymenoptera = hymen,
+         'Chilopod < 5mm' = Chil,
+         'Diplopod < 5mm' = Dip,
+         Pseudoscorpion = Pseu,
+         Isopoda = Iso
+  ) %>% 
+  dplyr::select(-Orb, -Norb, -Japy, -Camp, -OL, -hemip, -Enich,
+                  -Simphyla, -Scolopendrellida,
+                 -neuroptera)
+
+paper <- table %>% 
+  pivot_longer(
+    cols = where(is.numeric)
+  ) %>% 
+  group_by(date, tillage, name) %>% 
+  summarise(total = sum(value)) %>% 
+  mutate(date = case_when(date == '10/11/2023' ~ "11 October 2023",
+                          date == '7/28/2023' ~ "28 July 2023")) %>% 
+  print(n = Inf)
+
+paper <- paper %>% 
+  pivot_wider(names_from = name, 
+              values_from = total, 
+              values_fn = list(family = length))
+
+fp <- flextable(paper) %>% 
+  set_header_labels(values = list(
+    date = 'Date',
+    tillage = 'Tillage'
+  ))
+
+fp <- theme_zebra(fp)
+autofit(fp) %>% 
+  save_as_docx(path = 'rodaleabund.docx')
+
+
+
+# Abundance stats ####
+abund_models
+
+a0 <- glm(total_arth ~ trt, 
+                      data = abund_models)
+
+a1 <- glm(total_arth ~ trt + tillage, 
+          data = abund_models)
+
+a2<- glm(total_arth ~ trt + tillage + date, 
+          data = abund_models)
+
+a3 <- glm(total_arth ~ tillage + date, 
+          data = abund_models)
+anova(a0,a1,a2,a3)
+
+hist(residuals(a3))
+summary(a3)
+cld(emmeans(a3, ~tillage + date), Letters = letters)
+# tillage date       emmean   SE df lower.CL upper.CL .group
+# NT      10/11/2023   17.8 6.67 60      4.4     31.1  a    
+# T       10/11/2023   34.3 6.82 60     20.6     47.9  ab   
+# NT      7/28/2023    46.7 6.67 60     33.3     60.0   bc  
+# T       7/28/2023    63.2 6.67 60     49.8     76.5    c 
+
+
+
+# Abundance plots ####
+abund_models %>% 
+  group_by(date) %>% 
+  summarise(mean = mean(total_arth),
+            sd = sd(total_arth),
+            n = n(),
+            se = sd/sqrt(n))
+
+
+abund_plot <- abund_models %>% 
+  group_by(tillage, date) %>% 
+  summarise(mean = mean(total_arth),
+            sd = sd(total_arth),
+            n = n(),
+            se = sd/sqrt(n))
+
+ggplot(abund_plot, aes(x = date, y = mean, fill = tillage))+
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7,
+           aes(x = factor(date, level = c('7/28/2023', '10/11/2023'))))+
+  geom_errorbar(aes(x = date, ymin = mean-se, ymax = mean+se), 
+                position = position_dodge(0.9),
+                width = 0.4, linewidth = 1.3)+
+  scale_fill_manual(values = c("#E7298A", "#7570B3"),
+                    name = 'Tillage type', labels = c('No-Till', "Till"))+
+  scale_x_discrete(labels = c('28 July 2023','11 October 2023'))+
+  labs(title = 'Abundance by date and till',
+       x = 'Sampling date', 
+       y = 'Average abundance')+
+  theme(legend.position = 'bottom',
+        legend.key.size = unit(.5, 'cm'), 
+        legend.text = element_text(size = 24),
+        legend.title = element_text(size = 24),
+        axis.text.x = element_text(size=26),
+        axis.text.y = element_text(size = 26),
+        axis.title = element_text(size = 32),
+        plot.title = element_text(size = 28),
+        plot.subtitle = element_text(size = 24),
+        panel.grid.major.y = element_line(color = "darkgrey"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank())+
+  annotate('text', x = 0.75, y = 85, label = 'bc', size = 10)+
+  annotate('text', x = 1.23, y = 85, label = 'c', size = 10)+
+  annotate('text', x = 1.75, y = 85, label = 'a', size = 10)+
+  annotate('text', x = 2.23, y = 85, label = 'ab', size = 10)
+
+
+
+
+# yield x abundance ####
+grain_clean <- grain %>% 
+  group_by(plot) %>% 
+  summarise(mean_yield = mean(grain_g)) %>% 
+  mutate(trt = case_when(plot %in% c(122,222,322,422,522,622,722,822) ~ 'OL',
+                         plot %in% c(131,231,331,431,531,631,731,831) ~ 'CWW',
+                         plot %in% c(133,233,333,433,533,633,733,833) ~ 'CCC')) %>% 
+  relocate(plot, trt) %>% 
+  mutate_at(vars(1:2), as.factor) %>% 
+  arrange(trt) %>% 
+  print(n = Inf)
+
+g1 <- aov(mean_yield ~ trt, data = grain_clean)
+TukeyHSD(g1)
+hist(residuals(g1))
+# $trt
+# diff        lwr       upr     p adj
+# CWW-CCC  0.1266667 -0.2637572 0.5170906 0.6963964
+# OL-CCC  -0.1100000 -0.5004239 0.2804239 0.7602369
+# OL-CWW  -0.2366667 -0.6270906 0.1537572 0.2985669
+
+am_reg <- abund_models %>% 
+  filter(trt != 'OM') %>% 
+  group_by(plot) %>% 
+  summarise(mean_arth = mean(total_arth)) %>% 
+  rename(tret = plot) %>% 
+  print(n = Inf)
+
+ga_reg <- grain %>% 
+  mutate(trt = case_when(plot %in% c(122,222,322,422,522,622,722,822) ~ 'OL',
+                         plot %in% c(131,231,331,431,531,631,731,831) ~ 'CWW',
+                         plot %in% c(133,233,333,433,533,633,733,833) ~ 'CCC')) %>%  
+  group_by(plot) %>% 
+  summarise(mean_g = mean(grain_g)) %>% 
+  print(n = Inf)
+
+ab_reg <- cbind(am_reg, ga_reg) %>% 
+  dplyr::select(-tret)
+
+r1 <- glm(mean_g ~ mean_arth, data = ab_reg)
+hist(residuals(r1))
+summary(r1)
+
+ggplot(ab_reg, aes(x = mean_g, y = mean_arth))+
+  geom_point()
+
+
+
+# Scores cleaning ####
 
 # I need to assign values to each taxon group 
 # First, aggregate appropriate columns
@@ -223,6 +415,20 @@ rodale_final <- rodale_scores %>%
                            plot %in% c(711,722,731,733) ~ 7, 
                            plot %in% c(811,822,831,833) ~ 8))
 
+
+score_table <- rodale_final %>% 
+  group_by(date, tillage) %>% 
+  summarise(avg = mean(total_score), 
+            sd = sd(total_score),
+            n = n(),
+            se = sd/sqrt(n))
+
+overall <- flextable(score_table)
+overall <- theme_zebra(overall)
+autofit(overall) %>% 
+  save_as_docx(path = 'overall_scores.docx')
+
+
 ###
 ##
 #
@@ -237,7 +443,7 @@ mean_scores <- rodale_final %>%
 ggplot(mean_scores, aes(x = treatment, y = avg, fill = date))+
   geom_boxplot()
 
-# stats ####
+# Score stats ####
 
 # need to add a blocking factor (added above with rodale final)
 rodale_models <- rodale_final %>% 
@@ -247,19 +453,10 @@ rodale_models <- rodale_final %>%
          block = as.factor(block))
 
 
-# stats begin: this is done with mean scores df
-# ANOVA 
-# date is significant 
-aov_1 <- aov(total_score ~ treatment + date, data = rodale_models)
-summary(aov_1)
-hist(residuals(aov_1)) # look good
-TukeyHSD(aov_1)
-
-
 glm1 <- glm(total_score ~ treatment + date, data = rodale_models)
 summary(glm1)
 hist(residuals(glm1))
-cld(emmeans(glm1, ~date), Letters= letters)
+cld(emmeans(glm1, ~date), Letters= letters) # no differences among treatment
 # date       emmean   SE df lower.CL upper.CL .group
 # 10/11/2023   52.1 4.22 54     43.6     60.5  a    
 # 7/28/2023    75.5 4.14 54     67.2     83.8   b 
@@ -279,26 +476,38 @@ dispersion_stats <- rodale_models %>%
 
 poisson_model <- glmer(total_score ~ treatment + 
                        (1|block) + (1|date), 
-                     data = rodale_glmer, 
+                     data = rodale_models, 
                     family = poisson)
 
 nb_model_trt <- glmer.nb(total_score ~ treatment + (1|date), 
-                     data = rodale_glmer) 
+                     data = rodale_models) 
 
 lrtest(poisson_model,nb_model_trt)
 # the negative binomial has the higher likelihood score, so we will use that
 
-
+m0 <- glmer.nb(total_score ~  (1|date), 
+               data = rodale_models) 
 
 m1 <- glmer.nb(total_score ~ treatment + (1|date), 
-                         data = rodale_glmer) 
+                         data = rodale_models) 
+anova(m0,m1)
+# npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)
+# m0    3 606.04 612.47 -300.02   600.04                     
+# m1   10 614.38 635.81 -297.19   594.38 5.6617  7     0.5798
 summary(m1)
-r2_nakagawa(m1) #wont provide conditional with plot in random effect
-# r2_nakagawa(glmer_model, by_group = TRUE)
+r2_nakagawa(m1) 
 rodale_residuals <- binned_residuals(m1)
 plot(rodale_residuals)
 cld(emmeans(m1, ~treatment), Letters = letters)
-
+# treatment emmean    SE  df asymp.LCL asymp.UCL .group
+# OL - NT     3.81 0.188 Inf      3.44      4.18  a    
+# CCC - NT    4.05 0.186 Inf      3.68      4.41  a    
+# OM - T      4.15 0.195 Inf      3.77      4.53  a    
+# CWW - T     4.15 0.186 Inf      3.78      4.51  a    
+# OM - NT     4.18 0.186 Inf      3.82      4.55  a    
+# CWW - NT    4.22 0.185 Inf      3.85      4.58  a    
+# OL - T      4.24 0.185 Inf      3.87      4.60  a    
+# CCC - T     4.27 0.186 Inf      3.90      4.63  a 
 
 #
 ##
@@ -311,17 +520,14 @@ rodale_tillage <- rodale_final %>%
   group_by(date, trt, tillage) %>%
   print(n = Inf) 
 
-# stats with tillage separated 
-tillage_model <- aov(total_score ~ tillage , data = rodale_tillage)
-summary(tillage_model)
-hist(residuals(tillage_model))
-qqnorm(residuals(tillage_model))
-
 glm_tillage <- glm(total_score ~ tillage + date, data = rodale_tillage)
 summary(glm_tillage)
 hist(residuals(glm_tillage))
 qqnorm(residuals(glm_tillage))
-cld(emmeans(glm_tillage, ~ date))
+cld(emmeans(glm_tillage, ~ date), Letters = letters)
+# date       emmean   SE df lower.CL upper.CL .group
+# 10/11/2023   52.2 4.23 60     43.8     60.7  a    
+# 7/28/2023    75.5 4.16 60     67.1     83.8   b 
 
 
 # glmer for trt
@@ -331,15 +537,114 @@ rodale_tillage_glmer <- rodale_final %>%
   relocate(date, trt, block) %>% 
   mutate_at(vars(1:5), as.factor)
 
-m2 <- glmer.nb(total_score ~ tillage*trt + (1|date/block), 
+t0 <- glmer.nb(total_score ~ 
+                 (1|date/block), 
+               data = rodale_tillage_glmer)
+
+t1 <- glmer.nb(total_score ~ tillage + 
+                 (1|date/block), 
+               data = rodale_tillage_glmer)
+
+t2 <- glmer.nb(total_score ~ tillage + trt + 
+                 (1|date/block), 
                        data = rodale_tillage_glmer)
 
-cld(emmeans(m2, ~tillage*trt))
+t3 <- glmer.nb(total_score ~ tillage*trt + 
+                 (1|date/block), 
+               data = rodale_tillage_glmer)
+anova(t0,t1,t2,t3)
+# npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)
+# t0    4 607.61 616.19 -299.81   599.61                     
+# t1    5 608.77 619.49 -299.39   598.77 0.8392  1     0.3596
+# t2    8 613.49 630.64 -298.75   597.49 1.2798  3     0.7339
+# t3   11 615.56 639.13 -296.78   593.56 3.9397  3     0.2680
+
 summary(m2)
 r2_nakagawa(m2)
-r2_nakagawa(m2, by_group = TRUE)
-tillage_residuals <- binned_residuals(m2)
-tillage_residuals
+binned_residuals(m2)
+cld(emmeans(m2, ~tillage*trt), Letters= letters)
+# tillage trt emmean    SE  df asymp.LCL asymp.UCL .group
+# NT      OL    3.78 0.195 Inf      3.40      4.16  a    
+# NT      CCC   4.05 0.191 Inf      3.67      4.42  a    
+# T       OM    4.10 0.202 Inf      3.70      4.49  a    
+# T       CWW   4.13 0.191 Inf      3.76      4.51  a    
+# NT      OM    4.18 0.190 Inf      3.80      4.55  a    
+# T       OL    4.21 0.191 Inf      3.83      4.58  a    
+# NT      CWW   4.21 0.190 Inf      3.84      4.59  a    
+# T       CCC   4.24 0.191 Inf      3.86      4.61  a   
+
+
+
+# Score plots ####
+rodale_tillage %>%
+  group_by(trt, tillage) %>% 
+  summarise(mean = mean(total_score), 
+            sd = sd(total_score), 
+            n = n(),
+            se = sd/sqrt(n)) %>% 
+  mutate_at(vars(1:3), as.factor) %>% 
+  ggplot(aes(x = trt, y = mean))+
+  geom_bar(stat = 'identity', position = 'dodge') +
+  facet_wrap(~tillage)
+
+date_fig <- rodale_models %>%
+  relocate(date, plot, treatment, block) %>% 
+  group_by( date) %>% 
+  summarise(mean = mean(total_score), 
+            sd = sd(total_score), 
+            n = n(),
+            se = sd/sqrt(n)) 
+
+ggplot(date_fig, aes(x = date, y = mean, fill = date))+
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7,
+           aes(x = factor(date, level = c('7/28/2023', '10/11/2023'))))+
+  geom_errorbar(aes(x = date, ymin = mean-se, ymax = mean+se), 
+                position = position_dodge(0.9),
+                width = 0.4, linewidth = 1.3)+
+  scale_fill_manual(values = c("#E7298A", "#7570B3"))+
+  scale_x_discrete(labels = c('28 July 2023','11 October 2023'))+
+  labs(title = 'Rodale scores by date', 
+       y = 'Average QBS scores',
+       x = 'Samplting date')+
+  theme(legend.position = 'none',
+        axis.text.x = element_text(size=26),
+        axis.text.y = element_text(size = 26),
+        axis.title = element_text(size = 32),
+        plot.title = element_text(size = 28),
+        plot.subtitle = element_text(size = 24),
+        panel.grid.major.y = element_line(color = "darkgrey"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank())+
+  annotate('text', x = 1, y = 83, label = 'a', size = 10)+
+  annotate('text', x = 2, y = 83, label ='b', size = 10)
+
+
+
+# yield x score ####
+
+gs_reg <- grain %>% 
+  mutate(trt = case_when(plot %in% c(122,222,322,422,522,622,722,822) ~ 'OL',
+                         plot %in% c(131,231,331,431,531,631,731,831) ~ 'CWW',
+                         plot %in% c(133,233,333,433,533,633,733,833) ~ 'CCC')) %>%  
+  group_by(plot) %>% 
+  summarise(mean_g = mean(grain_g)) %>% 
+  rename(ploot = plot) %>% 
+  print(n = Inf)
+
+sc_reg <- rodale_final %>% 
+  filter(trt != 'OM') %>% 
+  group_by(plot) %>% 
+  summarise(mean_score = mean(total_score)) %>% 
+  print(n = Inf)
+
+scr_reg <- cbind(gs_reg, sc_reg) %>% 
+  dplyr::select(-ploot)
+s1 <- glm(mean_g ~ mean_score, data = scr_reg)
+hist(residuals(s1))
+summary(s1)
+
+ggplot(scr_reg, aes(x = mean_g, y = mean_score))+
+  geom_point()
 
 
 # Permanova ####
@@ -352,10 +657,18 @@ dist <- vegdist(arth_groups, "bray")
 
 permanova_all <- adonis2(dist ~ date + trt + tillage, permutations = 999, method = "bray", data = rodale_totals)
 permanova_all
-
+# Df SumOfSqs      R2      F Pr(>F)   
+# date      1   0.6909 0.05133 3.3101  0.004 **
+#   trt       3   0.6455 0.04796 1.0308  0.383   
+# tillage   1   0.2257 0.01677 1.0812  0.330   
+# Residual 57  11.8976 0.88394                 
+# Total    62  13.4597 1.00000
 
 
 # NMDS ####
+# these are all 3d and no differences by trt, so not including them. 
+
+
 # going to use taxon score df 
 
 # rodale_nmds<- rodale_clean %>% 
@@ -393,12 +706,12 @@ new_arth_groups <- rodale_ord_df[,3:23]
 
 
 ord_2 <- metaMDS(new_arth_groups, k = 2)
-ord_2$stress # 0.23
+ord_2$stress # 0.24
 stressplot(ord_2)
 
 # going to use this one
 ord_3 <- metaMDS(new_arth_groups, k = 3)
-ord_3$stress # 0.163
+ord_3$stress # 0.167
 stressplot(ord_3)
 
 
