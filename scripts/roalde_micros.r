@@ -428,6 +428,12 @@ overall <- theme_zebra(overall)
 autofit(overall) %>% 
   save_as_docx(path = 'overall_scores.docx')
 
+rodale_final %>% 
+  group_by(date) %>% 
+  summarise(avg = mean(total_score), 
+            sd = sd(total_score),
+            n = n(),
+            se = sd/sqrt(n))
 
 ###
 ##
@@ -524,10 +530,17 @@ glm_tillage <- glm(total_score ~ tillage + date, data = rodale_tillage)
 summary(glm_tillage)
 hist(residuals(glm_tillage))
 qqnorm(residuals(glm_tillage))
-cld(emmeans(glm_tillage, ~ date), Letters = letters)
+cld(emmeans(glm_tillage, ~ tillage + date), Letters = letters)
 # date       emmean   SE df lower.CL upper.CL .group
 # 10/11/2023   52.2 4.23 60     43.8     60.7  a    
 # 7/28/2023    75.5 4.16 60     67.1     83.8   b 
+
+# tillage date       emmean   SE df lower.CL upper.CL .group
+# NT      10/11/2023   47.7 5.11 60     37.4     57.9  a    
+# T       10/11/2023   56.8 5.22 60     46.4     67.3  ab   
+# NT      7/28/2023    70.9 5.11 60     60.7     81.1   bc  
+# T       7/28/2023    80.0 5.11 60     69.8     90.3    c 
+
 
 
 # glmer for trt
