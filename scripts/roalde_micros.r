@@ -58,7 +58,7 @@ grain <- grain_yield
 
 # This is the route I am going with 
 rodale_trt <- rodale %>%
-  mutate(tillage = c('NT', 'T')[1+str_detect(plot, "^[1 | 3 | 4 | 6]")])
+  mutate(tillage = c('T', 'NT')[1+str_detect(plot, "^[1 | 3 | 4 | 6]")])
 
 # did this work? : yes
 rodale_trt %>% 
@@ -202,10 +202,10 @@ hist(residuals(a3))
 summary(a3)
 cld(emmeans(a3, ~tillage + date), Letters = letters)
 # tillage date       emmean   SE df lower.CL upper.CL .group
-# NT      10/11/2023   17.8 6.67 60      4.4     31.1  a    
-# T       10/11/2023   34.3 6.82 60     20.6     47.9  ab   
-# NT      7/28/2023    46.7 6.67 60     33.3     60.0   bc  
-# T       7/28/2023    63.2 6.67 60     49.8     76.5    c 
+# T       10/11/2023   17.8 6.67 60      4.4     31.1  a    
+# NT      10/11/2023   34.3 6.82 60     20.6     47.9  ab   
+# T       7/28/2023    46.7 6.67 60     33.3     60.0   bc  
+# NT      7/28/2023    63.2 6.67 60     49.8     76.5    c  
 
 
 
@@ -249,10 +249,10 @@ ggplot(abund_plot, aes(x = date, y = mean, fill = tillage))+
         panel.grid.major.y = element_line(color = "darkgrey"),
         panel.grid.major.x = element_blank(),
         panel.grid.minor = element_blank())+
-  annotate('text', x = 0.75, y = 85, label = 'bc', size = 10)+
-  annotate('text', x = 1.23, y = 85, label = 'c', size = 10)+
-  annotate('text', x = 1.75, y = 85, label = 'a', size = 10)+
-  annotate('text', x = 2.23, y = 85, label = 'ab', size = 10)
+  annotate('text', x = 0.775, y = 85, label = 'a', size = 10)+
+  annotate('text', x = 1.225, y = 85, label = 'ab', size = 10)+
+  annotate('text', x = 1.775, y = 85, label = 'bc', size = 10)+
+  annotate('text', x = 2.225, y = 85, label = 'c', size = 10)
 
 
 
@@ -434,14 +434,24 @@ autofit(overall) %>%
 #
 # mean scores
 mean_scores <- rodale_final %>%
-  dplyr::select(-tillage, -trt, -plot) %>% 
-  arrange(date, treatment)  %>% 
-  group_by(treatment, date) %>% 
-  dplyr::summarize(avg = mean(total_score)) %>% #plyr has summarize
+  dplyr::select(-plot) %>% 
+  group_by(trt, tillage, date) %>% 
+  summarise(avg = mean(total_score),
+            sd = sd(total_score),
+            n = n(), 
+            se = sd/sqrt(n)) %>% 
+  arrange(date, tillage) %>% 
   print(n = Inf)
 
 ggplot(mean_scores, aes(x = treatment, y = avg, fill = date))+
   geom_boxplot()
+
+
+mean_overall <- flextable(mean_scores)
+mean_overall <- theme_zebra(mean_overall)
+autofit(mean_overall) %>% 
+  save_as_docx(path = 'mean_overall_scores.trt.till.docx')
+
 
 # Score stats ####
 
@@ -456,7 +466,7 @@ rodale_models <- rodale_final %>%
 glm1 <- glm(total_score ~ treatment + date, data = rodale_models)
 summary(glm1)
 hist(residuals(glm1))
-cld(emmeans(glm1, ~date), Letters= letters) # no differences among treatment
+cld(emmeans(glm1, ~treatment), Letters= letters) # no differences among treatment
 # date       emmean   SE df lower.CL upper.CL .group
 # 10/11/2023   52.1 4.22 54     43.6     60.5  a    
 # 7/28/2023    75.5 4.14 54     67.2     83.8   b 
@@ -495,6 +505,7 @@ anova(m0,m1)
 # m0    3 606.04 612.47 -300.02   600.04                     
 # m1   10 614.38 635.81 -297.19   594.38 5.6617  7     0.5798
 summary(m1)
+hist(residuals(m1))
 r2_nakagawa(m1) 
 rodale_residuals <- binned_residuals(m1)
 plot(rodale_residuals)
