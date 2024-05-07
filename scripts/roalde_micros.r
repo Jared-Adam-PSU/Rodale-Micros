@@ -549,40 +549,60 @@ rodale_tillage_glmer <- rodale_final %>%
   mutate_at(vars(1:5), as.factor)
 
 t0 <- glmer.nb(total_score ~ 
-                 (1|date/block), 
+                 (1|block), 
                data = rodale_tillage_glmer)
 
 t1 <- glmer.nb(total_score ~ tillage + 
-                 (1|date/block), 
+                 (1|block), 
                data = rodale_tillage_glmer)
 
 t2 <- glmer.nb(total_score ~ tillage + trt + 
-                 (1|date/block), 
+                 (1|block), 
                        data = rodale_tillage_glmer)
+t3 <- glmer.nb(total_score ~ tillage+trt+date + 
+           (1|block), 
+         data = rodale_tillage_glmer)
 
-t3 <- glmer.nb(total_score ~ tillage*trt + 
-                 (1|date/block), 
+t4 <- glmer.nb(total_score ~ tillage*trt*date + 
+                 (1|block), 
                data = rodale_tillage_glmer)
-anova(t0,t1,t2,t3)
-# npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)
-# t0    4 607.61 616.19 -299.81   599.61                     
-# t1    5 608.77 619.49 -299.39   598.77 0.8392  1     0.3596
-# t2    8 613.49 630.64 -298.75   597.49 1.2798  3     0.7339
-# t3   11 615.56 639.13 -296.78   593.56 3.9397  3     0.2680
+anova(t0,t1,t2,t3,t4)
+# Data: rodale_tillage_glmer
+# Models:
+#   t0: total_score ~ (1 | block)
+# t1: total_score ~ tillage + (1 | block)
+# t2: total_score ~ tillage + trt + (1 | block)
+# t3: total_score ~ tillage + trt + date + (1 | block)
+# t4: total_score ~ tillage * trt * date + (1 | block)
+# npar    AIC    BIC  logLik deviance   Chisq Df Pr(>Chisq)   
+# t0    3 610.73 617.16 -302.36   604.73                         
+# t1    4 611.20 619.77 -301.60   603.20  1.5283  1   0.216374   
+# t2    7 616.07 631.07 -301.03   602.07  1.1320  3   0.769347   
+# t3    8 608.34 625.49 -296.17   592.34  9.7246  1   0.001818 **
+#   t4   18 614.46 653.04 -289.23   578.46 13.8816 10   0.178463  
 
-summary(m2)
-r2_nakagawa(m2)
-binned_residuals(m2)
-cld(emmeans(m2, ~tillage*trt), Letters= letters)
-# tillage trt emmean    SE  df asymp.LCL asymp.UCL .group
-# NT      OL    3.78 0.195 Inf      3.40      4.16  a    
-# NT      CCC   4.05 0.191 Inf      3.67      4.42  a    
-# T       OM    4.10 0.202 Inf      3.70      4.49  a    
-# T       CWW   4.13 0.191 Inf      3.76      4.51  a    
-# NT      OM    4.18 0.190 Inf      3.80      4.55  a    
-# T       OL    4.21 0.191 Inf      3.83      4.58  a    
-# NT      CWW   4.21 0.190 Inf      3.84      4.59  a    
-# T       CCC   4.24 0.191 Inf      3.86      4.61  a   
+summary(t4)
+hist(residuals(t4))
+r2_nakagawa(t4)
+binned_residuals(t4)
+cld(emmeans(t4, ~tillage+trt+date), Letters= letters)
+# tillage trt date       emmean    SE  df asymp.LCL asymp.UCL .group
+# NT      CCC 10/11/2023   3.70 0.197 Inf      3.31      4.09  a    
+# T       OL  7/28/2023    3.74 0.195 Inf      3.36      4.13  a    
+# T       OL  10/11/2023   3.85 0.194 Inf      3.47      4.23  ab   
+# NT      OL  10/11/2023   3.90 0.194 Inf      3.52      4.28  ab   
+# T       OM  10/11/2023   3.93 0.193 Inf      3.55      4.31  ab   
+# NT      OM  10/11/2023   3.95 0.225 Inf      3.51      4.39  ab   
+# T       CCC 10/11/2023   4.00 0.191 Inf      3.62      4.37  ab   
+# T       CWW 10/11/2023   4.09 0.190 Inf      3.72      4.46  ab   
+# T       CCC 7/28/2023    4.09 0.190 Inf      3.72      4.47  ab   
+# NT      CWW 10/11/2023   4.11 0.192 Inf      3.73      4.48  ab   
+# NT      CWW 7/28/2023    4.17 0.190 Inf      3.80      4.54  ab   
+# NT      OM  7/28/2023    4.32 0.188 Inf      3.95      4.68  ab   
+# T       CWW 7/28/2023    4.34 0.188 Inf      3.97      4.71  ab   
+# T       OM  7/28/2023    4.42 0.187 Inf      4.05      4.79  ab   
+# NT      OL  7/28/2023    4.53 0.187 Inf      4.16      4.89  ab   
+# NT      CCC 7/28/2023    4.69 0.185 Inf      4.33      5.06   b   
 
 
 
